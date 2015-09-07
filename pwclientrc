@@ -1,0 +1,11 @@
+# Sample .pwclientrc file for the openvswitch project,
+# running on patchwork.ozlabs.org.
+#
+# Just append this file to your existing ~/.pwclientrc
+# If you do not already have a ~/.pwclientrc, then copy this file to
+# ~/.pwclientrc, and uncomment the following two lines:
+[options]
+default=openvswitch
+
+[openvswitch]
+url=https://patchwork.ozlabs.org/xmlrpc/
