@@ -15,11 +15,14 @@ const (
 	FLAG_OVS_COMMIT          = "ovs-commit"
 )
 
+var OVSDIR, OVSCOMMIT string
+
 func do_check() {
-	var duplicates []string
-	// maps between patch name to the non-duplicate 'pwclient list' line
+	var duplicates, committed []string
+	/* maps between patch name to the non-duplicate 'pwclient list' line. */
 	patches := make(map[string]string)
 
+	/* checks for duplicated patch records. */
 	cmd := exec.Command("python", "./pwclient", "list", "-s", "NEW")
 	cmd_stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -30,15 +33,15 @@ func do_check() {
 		log.Fatalf("'pwclient list' run error: %s", err)
 	}
 	scanner := bufio.NewScanner(cmd_stdout)
-	// 'pwclient list' output has format "ID STATE    NAME"
+	/* 'pwclient list' output has format "ID STATE    NAME". */
 	re := regexp.MustCompile(`^[0-9]+  New\s+\[.*\] (.*)$`)
 	for scanner.Scan() {
 		if submatch := re.FindStringSubmatch(scanner.Text()); submatch != nil {
-			// classifies the patches
-			if _, ok := patches[re.FindStringSubmatch(scanner.Text())[1]]; ok {
+			/* classifies the patches. */
+			if _, ok := patches[submatch[1]]; ok {
 				duplicates = append(duplicates, scanner.Text())
 			} else {
-				patches[re.FindStringSubmatch(scanner.Text())[1]] = scanner.Text()
+				patches[submatch[1]] = scanner.Text()
 			}
 		}
 	}
@@ -58,6 +61,47 @@ func do_check() {
 			fmt.Println(dup)
 		}
 	}
+
+	/* checks for committed patches. */
+	commit_range := fmt.Sprintf("%s..", OVSCOMMIT)
+	cmd = exec.Command("git", "log", "--oneline", commit_range)
+	cmd_stdout, err = cmd.StdoutPipe()
+	if err != nil {
+		log.Fatalf("'git log --oneline' cannot get stdout pipe: %s", err)
+	}
+	cmd.Dir = OVSDIR
+	err = cmd.Start()
+	if err != nil {
+		log.Fatalf("'git log --oneline' run error: %s", err)
+	}
+	scanner = bufio.NewScanner(cmd_stdout)
+	/* 'git log --oneline' output has format "ID NAME". */
+	re = regexp.MustCompile(`^[0-9a-f]+ (.*)$`)
+	for scanner.Scan() {
+		if submatch := re.FindStringSubmatch(scanner.Text()); submatch != nil {
+			/* if the committed patch name is found in 'patches',
+			 * record the 'pwclient list' entry in 'committed'. */
+			if elem, ok := patches[submatch[1]]; ok {
+				committed = append(committed, elem)
+			}
+		}
+	}
+	if scanner.Err() != nil {
+		log.Fatalf("'git log --oneline' scanner error: %s", scanner.Err())
+	}
+	err = cmd.Wait()
+	if err != nil {
+		log.Fatalf("'git log --oneline' exit error: %s", err)
+	}
+	if committed != nil {
+		fmt.Println("Committed Patches in Patchwork")
+		fmt.Println("==============================")
+		fmt.Println("ID      State        Name")
+		fmt.Println("--      -----        ----")
+		for _, entry := range committed {
+			fmt.Println(entry)
+		}
+	}
 }
 
 func main() {
@@ -72,15 +116,18 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:   FLAG_OVS_COMMIT,
-			Usage:  "Protocol used to connect mysql server",
+			Usage:  "Commit to start check for committed patches",
 		},
 	}
 	app.Writer = os.Stdout
 	log.SetOutput(os.Stdout)
-	app.Before = func(c *cli.Context) error {
-		return nil
-	}
 	app.Action = func(c *cli.Context) {
+		if OVSDIR = c.String(FLAG_OVS_DIR); OVSDIR == "" {
+			log.Fatalf("must provide option --ovs-dir")
+		}
+		if OVSCOMMIT = c.String(FLAG_OVS_COMMIT); OVSCOMMIT == "" {
+			log.Fatalf("must provide option --ovs-commit")
+		}
 		do_check()
 	}
 	app.Run(os.Args)
