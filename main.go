@@ -17,8 +17,13 @@ const (
 
 var OVSDIR, OVSCOMMIT string
 
-func do_check() {
-	var duplicates, committed []string
+/*
+ * Dumps all 'NEW' patch entries from patchwork.  Reports duplicated
+ * entries, records the rest entries in a string->string map and
+ * returns it.
+ */
+func do_duplication_check() map[string]string {
+	var duplicates []string
 	/* maps between patch name to the non-duplicate 'pwclient list' line. */
 	patches := make(map[string]string)
 
@@ -62,10 +67,20 @@ func do_check() {
 		}
 	}
 
-	/* checks for committed patches. */
+	return patches
+}
+
+/*
+ * Dumps specified commit history from ovs repo.  If the commit is
+ * found in "patches", it means that the patch has already been upstream
+ * and thusly should be marked as "accepted".
+ */
+func do_committed_check(patches map[string]string) {
+	var committed []string
+
 	commit_range := fmt.Sprintf("%s..", OVSCOMMIT)
-	cmd = exec.Command("git", "log", "--oneline", commit_range)
-	cmd_stdout, err = cmd.StdoutPipe()
+	cmd := exec.Command("git", "log", "--oneline", commit_range)
+	cmd_stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatalf("'git log --oneline' cannot get stdout pipe: %s", err)
 	}
@@ -74,9 +89,9 @@ func do_check() {
 	if err != nil {
 		log.Fatalf("'git log --oneline' run error: %s", err)
 	}
-	scanner = bufio.NewScanner(cmd_stdout)
+	scanner := bufio.NewScanner(cmd_stdout)
 	/* 'git log --oneline' output has format "ID NAME". */
-	re = regexp.MustCompile(`^[0-9a-f]+ (.*)$`)
+	re := regexp.MustCompile(`^[0-9a-f]+ (.*)$`)
 	for scanner.Scan() {
 		if submatch := re.FindStringSubmatch(scanner.Text()); submatch != nil {
 			/* if the committed patch name is found in 'patches',
@@ -106,8 +121,8 @@ func do_check() {
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "ovs-patchwork"
-	app.Usage = "Tool for ovs patchwork facilitation. " +
+	app.Name  =  "ovs-patchwork"
+	app.Usage = "Tool for ovs patchwork facilitation.  " +
 		    "User must provide the --ovs-dir and --ovs-commit options."
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -120,7 +135,6 @@ func main() {
 		},
 	}
 	app.Writer = os.Stdout
-	log.SetOutput(os.Stdout)
 	app.Action = func(c *cli.Context) {
 		if OVSDIR = c.String(FLAG_OVS_DIR); OVSDIR == "" {
 			log.Fatalf("must provide option --ovs-dir")
@@ -128,7 +142,9 @@ func main() {
 		if OVSCOMMIT = c.String(FLAG_OVS_COMMIT); OVSCOMMIT == "" {
 			log.Fatalf("must provide option --ovs-commit")
 		}
-		do_check()
+		patches := do_duplication_check()
+		do_committed_check(patches)
 	}
 	app.Run(os.Args)
+	log.SetOutput(os.Stdout)
 }
