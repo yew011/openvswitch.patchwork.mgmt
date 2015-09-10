@@ -28,7 +28,8 @@ func do_duplication_check() map[string]string {
 	patches := make(map[string]string)
 
 	/* checks for duplicated patch records. */
-	cmd := exec.Command("python", "./pwclient", "list", "-s", "NEW")
+	cmd := exec.Command("python", "./pwclient", "list", "-s", "NEW",
+			    "-f", "%{id}  %{state}    %{date}   %{name}")
 	cmd_stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatalf("'pwclient list' cannot get stdout pipe: %s", err)
@@ -38,8 +39,8 @@ func do_duplication_check() map[string]string {
 		log.Fatalf("'pwclient list' run error: %s", err)
 	}
 	scanner := bufio.NewScanner(cmd_stdout)
-	/* 'pwclient list' output has format "ID STATE    NAME". */
-	re := regexp.MustCompile(`^[0-9]+  New\s+\[.*\] (.*)$`)
+	/* 'pwclient list' output has format "ID  STATE   DATE   NAME". */
+	re := regexp.MustCompile(`^[0-9]+  New    .*   \[.*\] (.*)$`)
 	for scanner.Scan() {
 		if submatch := re.FindStringSubmatch(scanner.Text()); submatch != nil {
 			/* classifies the patches. */
@@ -60,8 +61,8 @@ func do_duplication_check() map[string]string {
 	if duplicates != nil {
 		fmt.Println("Duplicate Patches in Patchwork")
 		fmt.Println("==============================")
-		fmt.Println("ID      State        Name")
-		fmt.Println("--      -----        ----")
+		fmt.Println("ID      State  Date                  Name")
+		fmt.Println("--      -----  ----                  ----")
 		for _, dup := range duplicates {
 			fmt.Println(dup)
 		}
@@ -111,8 +112,8 @@ func do_committed_check(patches map[string]string) {
 	if committed != nil {
 		fmt.Println("Committed Patches in Patchwork")
 		fmt.Println("==============================")
-		fmt.Println("ID      State        Name")
-		fmt.Println("--      -----        ----")
+		fmt.Println("ID      State  Date                  Name")
+		fmt.Println("--      -----  ----                  ----")
 		for _, entry := range committed {
 			fmt.Println(entry)
 		}
