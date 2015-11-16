@@ -8,12 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"time"
 )
 
 const (
 	FLAG_OVS_DIR             = "ovs-dir"
 	FLAG_OVS_COMMIT          = "ovs-commit"
 )
+
+const dateShortForm = "2006-01-02"
 
 var OVSDIR, OVSCOMMIT string
 
@@ -23,9 +26,11 @@ var OVSDIR, OVSCOMMIT string
  * returns it.
  */
 func do_duplication_check() map[string]string {
-	var duplicates []string
+	var duplicates, outdated []string
 	/* maps between patch name to the non-duplicate 'pwclient list' line. */
 	patches := make(map[string]string)
+
+	today := time.Now()
 
 	/* checks for duplicated patch records. */
 	cmd := exec.Command("python", "./pwclient", "list", "-s", "NEW",
@@ -40,16 +45,28 @@ func do_duplication_check() map[string]string {
 	}
 	scanner := bufio.NewScanner(cmd_stdout)
 	/* 'pwclient list' output has format "ID  STATE   DATE   NAME". */
-	re := regexp.MustCompile(`^[0-9]+  New    .*   \[.*\] (.*)$`)
+	re := regexp.MustCompile(`^[0-9]+  New    ([-0-9]+) .*   \[.*\] (.*)$`)
 	for scanner.Scan() {
 		if submatch := re.FindStringSubmatch(scanner.Text()); submatch != nil {
+			dateField   := submatch[1]
+			commitField := submatch[2]
+
+			/* cherry-pick out more than 30-day old commits. */
+			date, err := time.Parse(dateShortForm, dateField)
+			if err != nil {
+				log.Fatalf("'pwclient list' cannot parse date: %s", err)
+			}
+			if today.Sub(date) / (24 * time.Hour) > 30 {
+				outdated = append(outdated, scanner.Text())
+			}
+
 			/* classifies the patches.  since the oldest record
 			 * comes first, we just kick it out of the map when
 			 * hitting a collison. */
-			if _, ok := patches[submatch[1]]; ok {
-				duplicates = append(duplicates, patches[submatch[1]])
+			if _, ok := patches[commitField]; ok {
+				duplicates = append(duplicates, patches[commitField])
 			}
-			patches[submatch[1]] = scanner.Text()
+			patches[commitField] = scanner.Text()
 		}
 	}
 	if scanner.Err() != nil {
@@ -59,6 +76,18 @@ func do_duplication_check() map[string]string {
 	if err != nil {
 		log.Fatalf("'pwclient list' exit error: %s", err)
 	}
+
+	if outdated != nil {
+		fmt.Println("30+ Day Old Patches")
+		fmt.Println("===================")
+		fmt.Println("ID      State  Date                  Name")
+		fmt.Println("--      -----  ----                  ----")
+		for _, out := range outdated {
+			fmt.Println(out)
+		}
+		fmt.Println()
+	}
+
 	if duplicates != nil {
 		fmt.Println("Duplicate Patches in Patchwork")
 		fmt.Println("==============================")
@@ -67,6 +96,7 @@ func do_duplication_check() map[string]string {
 		for _, dup := range duplicates {
 			fmt.Println(dup)
 		}
+		fmt.Println()
 	}
 
 	return patches
@@ -118,6 +148,7 @@ func do_committed_check(patches map[string]string) {
 		for _, entry := range committed {
 			fmt.Println(entry)
 		}
+		fmt.Println()
 	}
 }
 
