@@ -43,12 +43,13 @@ func do_duplication_check() map[string]string {
 	re := regexp.MustCompile(`^[0-9]+  New    .*   \[.*\] (.*)$`)
 	for scanner.Scan() {
 		if submatch := re.FindStringSubmatch(scanner.Text()); submatch != nil {
-			/* classifies the patches. */
+			/* classifies the patches.  since the oldest record
+			 * comes first, we just kick it out of the map when
+			 * hitting a collison. */
 			if _, ok := patches[submatch[1]]; ok {
-				duplicates = append(duplicates, scanner.Text())
-			} else {
-				patches[submatch[1]] = scanner.Text()
+				duplicates = append(duplicates, patches[submatch[1]])
 			}
+			patches[submatch[1]] = scanner.Text()
 		}
 	}
 	if scanner.Err() != nil {
@@ -122,7 +123,7 @@ func do_committed_check(patches map[string]string) {
 
 func main() {
 	app := cli.NewApp()
-	app.Name  =  "ovs-patchwork"
+	app.Name  = "ovs-patchwork"
 	app.Usage = "Tool for ovs patchwork facilitation.  " +
 		    "User must provide the --ovs-dir and --ovs-commit options."
 	app.Flags = []cli.Flag{
