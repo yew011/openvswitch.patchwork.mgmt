@@ -22,7 +22,7 @@ var OVSDIR, OVSCOMMIT string
 
 /*
  * Dumps all 'NEW' patch entries from patchwork.  Reports duplicated
- * entries, records the rest entries in a string->string map and
+ * entries, records the rest of entries in a string->string map and
  * returns it.
  */
 func do_duplication_check() map[string]string {
@@ -32,7 +32,7 @@ func do_duplication_check() map[string]string {
 
 	today := time.Now()
 
-	/* checks for duplicated patch records. */
+	/* checks for outdated and duplicated patch records. */
 	cmd := exec.Command("python", "./pwclient", "list", "-s", "NEW",
 			    "-f", "%{id}  %{state}    %{date}   %{name}")
 	cmd_stdout, err := cmd.StdoutPipe()
@@ -44,17 +44,20 @@ func do_duplication_check() map[string]string {
 		log.Fatalf("'pwclient list' run error: %s", err)
 	}
 	scanner := bufio.NewScanner(cmd_stdout)
-	/* 'pwclient list' output has format "ID  STATE   DATE   NAME". */
+	/* 'pwclient list' output has format "ID  STATE   DATE   NAME".
+	 * extracts "DATE" and "NAME". */
 	re := regexp.MustCompile(`^[0-9]+  New    ([-0-9]+) .*   \[.*\] (.*)$`)
 	for scanner.Scan() {
-		if submatch := re.FindStringSubmatch(scanner.Text()); submatch != nil {
+		if submatch := re.FindStringSubmatch(scanner.Text());
+		   submatch != nil {
 			dateField   := submatch[1]
 			commitField := submatch[2]
 
-			/* cherry-pick out more than 30-day old commits. */
+			/* cherry-picks more than 30-day old patches. */
 			date, err := time.Parse(dateShortForm, dateField)
 			if err != nil {
-				log.Fatalf("'pwclient list' cannot parse date: %s", err)
+				log.Fatalf("'pwclient list' cannot parse " +
+					   "date: %s", err)
 			}
 			if today.Sub(date) / (24 * time.Hour) > 30 {
 				outdated = append(outdated, scanner.Text())
@@ -64,7 +67,8 @@ func do_duplication_check() map[string]string {
 			 * comes first, we just kick it out of the map when
 			 * hitting a collison. */
 			if _, ok := patches[commitField]; ok {
-				duplicates = append(duplicates, patches[commitField])
+				duplicates = append(duplicates,
+						    patches[commitField])
 			}
 			patches[commitField] = scanner.Text()
 		}
@@ -104,8 +108,8 @@ func do_duplication_check() map[string]string {
 
 /*
  * Dumps specified commit history from ovs repo.  If the commit is
- * found in "patches", it means that the patch has already been upstream
- * and thusly should be marked as "accepted".
+ * found in "patches", it means that the patch has already been
+ * upstreamed and thusly should be marked as "accepted".
  */
 func do_committed_check(patches map[string]string) {
 	var committed []string
