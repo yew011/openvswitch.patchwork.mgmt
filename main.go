@@ -114,8 +114,7 @@ func do_duplication_check() map[string]string {
 func do_committed_check(patches map[string]string) {
 	var committed []string
 
-	commit_range := fmt.Sprintf("%s..", OVSCOMMIT)
-	cmd := exec.Command("git", "log", "--oneline", commit_range)
+	cmd := exec.Command("git", "log", "--oneline", "-n", "500", OVSCOMMIT)
 	cmd_stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatalf("'git log --oneline' cannot get stdout pipe: %s", err)
