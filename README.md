@@ -38,6 +38,8 @@ Tools for facilitating the patchwork for Open vSwitch
 	GLOBAL OPTIONS:
 	   --ovs-dir            Path to ovs git repo
 	   --ovs-commit         Commit to start check for committed patches
+	   --mark-committed     Mark the committed patch as 'Accepted'
+	   --mark-dup           Mark the duplicate patch as 'Not Applicable'
 	   --help, -h           show help
 	   --version, -v        print the version
 
